@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Privacy guarantee enforced by the browser: no network requests of any kind (no fetch, XHR, beacons, images, fonts, forms). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Pay Report CSV Builder</title>
+<meta name="description" content="Turn a payroll register (CSV or Excel) into the upload CSV for B.C.'s Pay Transparency Reporting Tool. Runs entirely in your browser — payroll data never leaves your computer.">
+<style>
+:root{--bg:#f7f7f4;--card:#fff;--ink:#1b1d1f;--muted:#5d6268;--line:#dcdcd6;--accent:#0b6e4f;--accent-ink:#fff;--warn:#9a5b00;--warn-bg:#fff4e0;--err:#a3202b;--err-bg:#fde8ea;--ok-bg:#e6f4ee}
+@media (prefers-color-scheme:dark){:root{--bg:#141618;--card:#1d2023;--ink:#e9eaeb;--muted:#9aa0a6;--line:#33373b;--accent:#3fbf8f;--accent-ink:#06261b;--warn:#f0b357;--warn-bg:#3a2a10;--err:#ff8a92;--err-bg:#3b1a1e;--ok-bg:#15332a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:0 16px}
+header.hero{padding:56px 0 32px}
+h1{font-size:clamp(28px,4.4vw,42px);line-height:1.15;margin:0 0 14px;letter-spacing:-.02em}
+h2{font-size:24px;margin:0 0 12px;letter-spacing:-.01em}
+h3{font-size:17px;margin:0 0 8px}
+p{margin:0 0 12px}
+.lede{font-size:19px;color:var(--muted);max-width:720px}
+.pill{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--warn-bg);color:var(--warn);font-weight:600;font-size:14px;margin-bottom:14px}
+.btn{display:inline-block;border:0;border-radius:8px;padding:11px 18px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;background:var(--accent);color:var(--accent-ink)}
+.btn.secondary{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+section{padding:28px 0;border-top:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+ul{padding-left:20px;margin:0 0 12px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:30px;text-align:center;background:var(--card);cursor:pointer}
+.drop.over{border-color:var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:10px 0}
+label.f{display:flex;flex-direction:column;font-size:13px;color:var(--muted);gap:4px}
+select,input[type=number],input[type=text]{font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);max-width:100%}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;background:var(--bg);position:sticky;top:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.flag td{background:var(--warn-bg)}
+tr.unmapped td{background:var(--err-bg)}
+.note{font-size:13px;color:var(--muted)}
+.issue{border-radius:8px;padding:10px 12px;margin:8px 0;font-size:14px}
+.issue.error{background:var(--err-bg);color:var(--err)}
+.issue.warn{background:var(--warn-bg);color:var(--warn)}
+.issue.ok{background:var(--ok-bg)}
+.hidden{display:none}
+.price{font-size:34px;font-weight:700}
+.gate{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px}
+footer{padding:28px 0 60px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+code{font-size:13px;background:var(--bg);padding:1px 4px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="pill" id="countdown">B.C. deadline: November 1, 2026</div>
+  <h1>Turn your payroll register into B.C.'s pay transparency upload CSV.</h1>
+  <p class="lede">Drop in your year-to-date payroll register as a CSV or Excel file. Then sort each pay code into the province's seven columns, following the rules in the government's guidance, and download a file that passes the Reporting Tool's checks. It all runs in your browser, so no payroll data is uploaded.</p>
+  <p><a class="btn" href="#tool">Try it free with your file</a> <a class="btn secondary" href="#price">C$149 / year</a></p>
+</header>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <div class="grid">
+    <div class="card"><h3>~8,500 first-time filers</h3><p class="small muted">From November 1, 2026, every provincially regulated B.C. employer with 50 or more employees must post a pay transparency report. In 2025 the rule applied to about 700 employers.</p></div>
+    <div class="card"><h3>Your payroll system doesn't export it</h3><p class="small muted">The province's tool needs a 7-column CSV. A payroll register has dozens of pay codes: regular, stat, vacation, 4% vacation pay, OT 1.5, shift premium, car allowance, retro, severance…</p></div>
+    <div class="card"><h3>The rules are easy to get wrong</h3><p class="small muted">Vacation <em>taken</em> counts as ordinary pay, but vacation <em>paid out</em> is excluded. Stat pay is never overtime. Overtime hours don't count as hours worked. Special Salary is only for lump sums with no set hours.</p></div>
+    <div class="card"><h3>Every rejected row means another trip to Excel</h3><p class="small muted">The province's tool rejects a file row by row, for example when a row has hours but no ordinary pay, or overtime pay without overtime hours. This page runs the same checks as you map, and tells you how to fix each one.</p></div>
+  </div>
+</section>
+
+<section id="tool">
+  <h2>The converter</h2>
+  <p class="muted small">Start with a payroll register covering one 12-month period: either the most recently completed calendar year or your fiscal year, ending no later than October 31 of the reporting year. You can export it one row per employee per pay code, or one row per employee with a column for each code. Use the YTD earnings or payroll register report.</p>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a payroll register file">
+    <strong>Drop payroll register here</strong> or click to choose<br><span class="small muted">.csv, .txt or .xlsx. The file is read locally and never uploaded.</span>
+    <input type="file" id="file" accept=".csv,.txt,.xlsx,.tsv" class="hidden">
+  </div>
+  <div id="fileErr" class="issue error hidden"></div>
+
+  <div id="step-cols" class="hidden">
+    <h3 style="margin-top:22px">1 · Columns</h3>
+    <div class="row">
+      <label class="f">Header row <input type="number" id="hdrRow" min="1" style="width:80px"></label>
+      <label class="f">Layout <select id="layout"><option value="long">One row per employee per pay code</option><option value="wide">One row per employee, a column per code</option></select></label>
+      <label class="f">Employee ID column <select id="cId"></select></label>
+      <label class="f lo">Pay code column <select id="cCode"></select></label>
+      <label class="f lo">Description column (optional) <select id="cDesc"></select></label>
+      <label class="f lo">Hours column <select id="cHours"></select></label>
+      <label class="f lo">Amount column <select id="cAmt"></select></label>
+    </div>
+    <h3 style="margin-top:18px">2 · Gender</h3>
+    <p class="small muted">Use the marker each employee gave you: M, W or F, X, or U. Anyone who didn't provide one is reported as U.</p>
+    <div class="row">
+      <label class="f">Source <select id="gSrc"><option value="col">A column in this file</option><option value="file">A separate file (Employee ID, Gender)</option><option value="none">Not collected: report everyone as U</option></select></label>
+      <label class="f" id="gColWrap">Gender column <select id="cGender"></select></label>
+      <label class="f hidden" id="gFileWrap">Gender file <input type="file" id="gFile" accept=".csv,.txt,.xlsx"></label>
+    </div>
+    <div id="gFileInfo" class="note"></div>
+
+    <h3 style="margin-top:18px">3 · Map each pay code</h3>
+    <p class="small muted">Suggestions follow the province's <em>Guidance for Preparing Pay Transparency Reports</em>. Rows highlighted orange are judgement calls, so read the note. Rows in red need a decision before you can download. Your choices are saved in this browser for next year.</p>
+    <div class="row"><label class="small"><input type="checkbox" id="onlyFlag"> Show only codes that need review</label></div>
+    <div class="tablewrap"><table id="mapTbl"><thead><tr><th>Pay code</th><th class="num">Employees</th><th class="num">Hours</th><th class="num">Amount</th><th>Goes to</th><th>Why</th></tr></thead><tbody></tbody></table></div>
+
+    <h3 style="margin-top:18px">4 · Options</h3>
+    <div class="row">
+      <label class="f">Salaried staff with no recorded hours: use this many hours a year (leave blank to flag them instead) <input type="number" id="fallback" min="0" max="8760" placeholder="e.g. 1950" style="width:140px"></label>
+      <label class="small"><input type="checkbox" id="dropBad"> Leave out employees whose row the province would reject (record this under "Data Constraints")</label>
+    </div>
+
+    <h3 style="margin-top:18px">5 · Result</h3>
+    <div id="summary"></div>
+    <div id="issues"></div>
+    <h3 style="margin-top:14px">Free preview: first 5 rows</h3>
+    <div class="tablewrap"><table id="prevTbl"><thead></thead><tbody></tbody></table></div>
+    <div class="gate">
+      <button class="btn" id="dl" disabled>Download full CSV</button>
+      <button class="btn secondary" id="dlMap" disabled>Download mapping record</button>
+      <span id="gateMsg" class="small muted"></span>
+    </div>
+  </div>
+</section>
+
+<section id="privacy">
+  <h2>Privacy</h2>
+  <ul>
+    <li><strong>Nothing is uploaded.</strong> The page reads your file with your browser's own file reader. The page's Content-Security-Policy blocks <em>all</em> network requests (<code>connect-src 'none'</code>), so it couldn't send your data anywhere even if it tried.</li>
+    <li>You can check this. Open your browser's developer tools, go to the Network tab, and load a file: no requests appear. Or save this page and use it offline.</li>
+    <li>The output has no names or IDs. It has only the seven columns the province asks for. The only thing kept in your browser is how you mapped your pay codes, such as "REG → Ordinary"; no pay figures are stored.</li>
+  </ul>
+</section>
+
+<section id="price">
+  <h2>Price</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="price">C$149 <span class="small muted">/ employer / year</span></div>
+      <ul class="small">
+        <li>Free preview of the first 5 rows, plus the full validation report, before you pay</li>
+        <li>Full upload CSV and a mapping record to keep with your filing</li>
+        <li>Also covers next year's report: your mappings are remembered</li>
+      </ul>
+      <a class="btn" id="buy" href="#" target="_blank" rel="noopener">Buy (C$149)</a>
+      <p class="note" style="margin-top:8px">Checkout opens in a new tab, so your file stays loaded here. Once payment is done, this tab unlocks the download.</p>
+    </div>
+    <div class="card">
+      <h3>Bookkeeper or payroll provider?</h3>
+      <p class="small muted">If you file for several client employers, email <span id="contact">CONTACT_EMAIL</span> about a firm licence.</p>
+      <h3>Is it accurate?</h3>
+      <p class="small muted">It applies the guidance's definitions, and it flags any code where the guidance depends on facts it can't see, such as whether a leave was paid at 100%. You decide those, and you're responsible for the final report.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Not affiliated with, or endorsed by, the Government of British Columbia. This isn't legal advice. You upload the CSV to the province's Pay Transparency Reporting Tool yourself, using your Business BCeID. Rules come from the province's guidance for pay transparency reports and its published upload validation, as checked on 2026-10-02.</p>
+  <p>Sold by <span id="seller">SELLER_NAME</span> · <span id="contact2">CONTACT_EMAIL</span></p>
+</footer>
+</div>
+
+<script id="core">
+/* Pure conversion + validation logic. No DOM access; the test suite runs this block in Node. */
+const PT = (() => {
+  const HEADER = ['Gender Code', 'Hours Worked', 'Ordinary Pay', 'Special Salary', 'Overtime Hours', 'Overtime Pay', 'Bonus Pay'];
+  const MAX_HOURS = 8760, MAX_DOLLARS = 999999999; // province backend limits
+  const GENDERS = ['M', 'W', 'F', 'X', 'U'];
+  const CATS = {
+    ordinary: 'Ordinary Pay (+ its hours → Hours Worked)',
+    overtime: 'Overtime Pay (+ its hours → Overtime Hours)',
+    special: 'Special Salary',
+    bonus: 'Bonus Pay',
+    hours: 'Hours Worked only',
+    ot_hours: 'Overtime Hours only',
+    exclude: 'Exclude (not reported)',
+  };
+
+  // ---------- parsing ----------
+  function parseCSV(text) {
+    text = String(text).replace(/^﻿/, '');
+    const sample = text.slice(0, 4000);
+    const count = (ch) => sample.split(ch).length - 1;
+    const delim = [',', ';', '\t'].sort((a, b) => count(b) - count(a))[0];
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += c;
+      } else if (c === '"' && cell === '') q = true;
+      else if (c === delim) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  function parseNumber(v) {
+    if (typeof v === 'number') return v;
+    if (v == null) return 0;
+    let s = String(v).trim();
+    if (s === '' || s === '-') return 0;
+    let neg = false;
+    if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+    if (/-$/.test(s)) { neg = true; s = s.slice(0, -1); }
+    s = s.replace(/CAD|C\$|\$|,|\s/gi, '');
+    if (s.startsWith('-')) { neg = !neg; s = s.slice(1); }
+    if (!/^\d*\.?\d+(e[-+]?\d+)?$/i.test(s)) return NaN;
+    const n = Number(s);
+    return neg ? -n : n;
+  }
+
+  function decodeXml(s) {
+    return s.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (m, e) => {
+      if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+      return { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" }[e.toLowerCase()];
+    });
+  }
+
+  async function unzip(buf) {
+    const b = new Uint8Array(buf), dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let eocd = -1;
+    for (let i = b.length - 22; i >= Math.max(0, b.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new Error('Not a valid .xlsx file (zip directory not found). Older .xls files are not supported, so please save the file as .xlsx or .csv.');
+    const n = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const files = {};
+    for (let k = 0; k < n; k++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+      const nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      const name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nl));
+      const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+      files[name] = { method, data: b.subarray(start, start + csize) };
+      p += 46 + nl + el + cl;
+    }
+    return async (name) => {
+      const f = files[name];
+      if (!f) return null;
+      let out = f.data;
+      if (f.method === 8) out = new Uint8Array(await new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+      else if (f.method !== 0) throw new Error('Unsupported compression in .xlsx');
+      return new TextDecoder().decode(out);
+    };
+  }
+
+  function colIndex(ref) {
+    const m = /^([A-Z]+)/.exec(ref || ''); if (!m) return -1;
+    let n = 0; for (const ch of m[1]) n = n * 26 + ch.charCodeAt(0) - 64;
+    return n - 1;
+  }
+
+  async function readXlsx(buf) {
+    const get = await unzip(buf);
+    const wb = await get('xl/workbook.xml');
+    if (!wb) throw new Error('This .xlsx file has no workbook.');
+    let sheetPath = 'xl/worksheets/sheet1.xml';
+    const first = /<sheet\b[^>]*\br:id="([^"]+)"/.exec(wb) || /<sheet\b[^>]*\bid="([^"]+)"/.exec(wb);
+    const rels = await get('xl/_rels/workbook.xml.rels');
+    if (first && rels) {
+      const re = new RegExp('<Relationship\\b[^>]*Id="' + first[1] + '"[^>]*Target="([^"]+)"|<Relationship\\b[^>]*Target="([^"]+)"[^>]*Id="' + first[1] + '"');
+      const m = re.exec(rels);
+      if (m) { const t = m[1] || m[2]; sheetPath = t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, ''); }
+    }
+    const ssXml = await get('xl/sharedStrings.xml');
+    const shared = [];
+    if (ssXml) for (const m of ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+      const body = m[1].replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+      shared.push(decodeXml([...body.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join('')));
+    }
+    const sheet = await get(sheetPath);
+    if (!sheet) throw new Error('Could not find the first worksheet in this .xlsx file.');
+    const rows = [];
+    let rIdx = -1;
+    for (const rm of sheet.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+      const rr = /\br="(\d+)"/.exec(rm[1]); rIdx = rr ? Number(rr[1]) - 1 : rIdx + 1;
+      const row = []; let cIdx = -1;
+      for (const cm of (rm[2] || '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const attrs = cm[1], inner = cm[2] || '';
+        const ref = /\br="([A-Z]+\d+)"/.exec(attrs); cIdx = ref ? colIndex(ref[1]) : cIdx + 1;
+        const t = (/\bt="(\w+)"/.exec(attrs) || [])[1] || 'n';
+        const v = (/<v>([\s\S]*?)<\/v>/.exec(inner) || [])[1];
+        let val = '';
+        if (t === 's') val = shared[Number(v)] ?? '';
+        else if (t === 'inlineStr') val = decodeXml([...inner.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join(''));
+        else if (t === 'str' || t === 'e') val = v != null ? decodeXml(v) : '';
+        else if (t === 'b') val = v === '1' ? 'TRUE' : 'FALSE';
+        else val = v != null && v !== '' ? Number(v) : '';
+        row[cIdx] = val;
+      }
+      for (let i = 0; i < row.length; i++) if (row[i] === undefined) row[i] = '';
+      rows[rIdx] = row;
+    }
+    for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = [];
+    return rows;
+  }
+
+  async function readFile(name, buf) {
+    if (/\.xlsx$/i.test(name)) return readXlsx(buf);
+    if (/\.xls$/i.test(name)) throw new Error('Old .xls files are not supported. In Excel, use File → Save As → .xlsx or .csv.');
+    return parseCSV(new TextDecoder().decode(buf));
+  }
+
+  // ---------- column detection ----------
+  const str = (v) => (v == null ? '' : String(v)).trim();
+  const isTextCell = (v) => str(v) !== '' && Number.isNaN(parseNumber(v));
+
+  function detectHeaderRow(rows) {
+    const lim = Math.min(rows.length, 30);
+    let maxNE = 0;
+    for (let i = 0; i < lim; i++) maxNE = Math.max(maxNE, rows[i].filter(c => str(c) !== '').length);
+    for (let i = 0; i < lim; i++) {
+      const ne = rows[i].filter(c => str(c) !== '');
+      if (ne.length >= Math.max(2, Math.ceil(maxNE * 0.6)) && ne.filter(isTextCell).length / ne.length >= 0.8) return i;
+    }
+    return 0;
+  }
+
+  function findCol(header, res, exclude = []) {
+    for (const re of res) {
+      const i = header.findIndex((h, k) => !exclude.includes(k) && re.test(str(h)));
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
+
+  function guessColumns(header, data) {
+    const id = findCol(header, [/^(emp(loyee)?|ee|staff|worker)[\s._-]*(id|#|no\.?|num(ber)?|code)$/i, /^(id|employee|emp|file\s*#|badge|payroll\s*id)$/i, /\b(id|#|number|no\.?)$/i, /employee|emp\b/i]);
+    const name = findCol(header, [/name/i], [id]);
+    const gender = findCol(header, [/gender|^sex$/i], [id]);
+    const code = findCol(header, [/^(pay|earn(ing)?s?|wage|income)[\s_-]*(code|type|item)$/i, /^(code|pay\s*code|earning|earning\s*code|pay\s*item|type)$/i, /code/i], [id, gender]);
+    const desc = findCol(header, [/desc/i, /^(earning|pay\s*item|item)$/i], [id, name, gender, code]);
+    const hours = findCol(header, [/^(hours|hrs|units|qty|quantity)$/i, /hours|hrs/i], [id, code, desc]);
+    const amount = findCol(header, [/^(amount|amt|earnings|ytd\s*amount|current\s*amount|total\s*amount|\$)$/i, /amount|amt/i, /ytd|earnings/i], [id, code, desc, hours]);
+    let layout = 'wide';
+    if (code >= 0 && amount >= 0 && id >= 0) {
+      const ids = data.map(r => str(r[id])).filter(Boolean);
+      if (new Set(ids).size < ids.length) layout = 'long';
+    }
+    return { id, name, gender, code, desc, hours, amount, layout };
+  }
+
+  function isTotalRow(row, cfg) {
+    const idv = str(row[cfg.id]);
+    if (!idv) return true;
+    const nm = cfg.name >= 0 ? str(row[cfg.name]) : '';
+    return /^(grand\s*)?(sub)?totals?\b|^report total|^company total/i.test(idv) || /^(grand\s*)?(sub)?totals?\b/i.test(nm);
+  }
+
+  // ---------- classification rules (B.C. guidance for pay gap reporting) ----------
+  // Order matters: first match wins.
+  const RULES = [
+    [/\b(gross|total|subtotal|net pay|net)\b/, 'exclude', true, 'Looks like a subtotal or total. Including it would double-count the individual codes.'],
+    [/(top.?up|\bsub\b.*plan|supplement|wcb|worksafe|workers.?comp|\bltd\b|\bstd\b|disabilit|maternity|parental|pregnan|compassionate care)/, 'exclude', true, 'Paid leave counts as Ordinary Pay only when the employee is paid 100% of salary. If this leave was paid at 100%, choose Ordinary; if it was partial pay or a top-up, leave it excluded.'],
+    [/\b(cpp|qpp|ei|ui|tax|income tax|withholding|deduction|dues|garnish|levy|union)\b|rrsp ded|pension (contrib|ded)|\bee (pension|rrsp)/, 'exclude', false, 'Deduction or withholding, not pay.'],
+    [/sever|termination|in lieu of notice|\bpilon\b|retiring allowance|notice pay|wrongful/, 'exclude', false, 'Severance and termination pay are excluded from Ordinary Pay (guidance, "Ordinary Pay").'],
+    [/(vac(ation)?|holiday)\s*(pay(ment)?\s*)?(out|payout|paid out)|(vac(ation)?)\s*pay\b|\bvac\s*%|vacation\s*\d+\s*%|\d+\s*%\s*vac|accrued vac|vac(ation)?\s*(accrual|owing|bal)/, 'exclude', true, 'Vacation paid out instead of taken as leave is excluded. If this code pays for vacation days actually taken, choose Ordinary.'],
+    [/\b(bank(ed)?|lieu|toil|cto)\b.*\b(ot|overtime)\b|\b(ot|overtime)\b.*\b(bank(ed)?|lieu)\b/, 'overtime', true, 'Banked overtime: the hours are not reported while banked. When it is paid out at 1.5× or more, report it as Overtime in the period it is paid. When it is taken as paid time off, choose Ordinary.'],
+    [/\bflex\b.*\b(out|payout|paid)\b|\b(bank(ed)?|lieu|toil|cto)\b.*\b(out|payout|paid out)\b/, 'exclude', true, 'Guidance: banked flex time that is paid out is treated like vacation, so a payout (not taken as leave) is excluded. Time actually taken off is Ordinary.'],
+    [/retro/, 'exclude', true, 'Retroactive pay for commitments outside the reporting period is excluded. Retro pay for work inside the period is Ordinary.'],
+    [/on.?call|stand.?by|call.?back|call.?in|call.?out/, 'ordinary', true, 'On-call/standby: a premium for work is Ordinary. A fixed allowance at the employee\'s sole disposal is excluded. Call-back for extra hours paid at 1.5× or more is Overtime.'],
+    [/allow|mileage|kilomet|\bkm\b|\bcar\b|auto\b|vehicle|per.?diem|\bmeal|travel|accommodat|housing|lodging|room and board|phone|\bcell|internet|tool|uniform|cloth|boot|isolat|remote|northern|living|relocat|moving/, 'exclude', false, 'Allowances (predetermined, for a set purpose, at the employee\'s disposal) and reimbursements are excluded.'],
+    [/reimb|expense|\bexp\b/, 'exclude', false, 'Reimbursements of employment expenses are excluded.'],
+    [/benefit|taxable|\btb\b|group life|\bgtl\b|life ins|health|dental|medical|\bmsp\b|gym|wellness|fitness|parking|\bloan\b|rrsp match|employer rrsp|\bdcpp\b|pension/, 'exclude', false, 'Benefits, including taxable benefits, are excluded.'],
+    [/straight.?time.*\b(ot|overtime)\b|\b(ot|overtime)\b.*(1\.0|x1\b|straight)/, 'ordinary', true, 'Overtime paid below 1.5× doesn\'t meet the guidance\'s overtime definition. Treated as Ordinary, so its hours count as Hours Worked.'],
+    [/\bstat|statutory|holiday|\bgen(eral)? hol/, 'ordinary', false, 'Guidance: statutory pay is never overtime. It goes in Ordinary Pay, and its hours count as Hours Worked.'],
+    [/overtime|\bot\b|\bot\s*\d|\bot\d|double.?time|\bdt\b|time.?and.?a.?half|\b1\.5\s*x?\b|\b2(\.0)?\s*x\b|x\s*1\.5|x\s*2\b|\bot1|\bot2/, 'overtime', false, 'Overtime paid at 1.5× or more is reported when paid. Its hours go to Overtime Hours, not Hours Worked.'],
+    [/bonus|commission|\bcomm\b|incentive|profit.?shar|gain.?shar|referral|signing|sign.?on|retention|performance|spot|award|\brsu|\bpsu|stock|share|equity|\besop|\bkpi|\bstip|\bltip|\bvariable/, 'bonus', false, 'Bonus Pay: profit sharing, productivity, performance, commission, referral, signing, and vested equity, reported in the calendar year paid.'],
+    [/honorar|stipend|lump.?sum|director.?fee|board fee|\bfee\b/, 'special', true, 'Special Salary is only for a lump sum for work with no set hours. That employee must then have 0 Hours Worked and 0 Ordinary Pay, or the province rejects the row. If the person also earns regular pay, choose Ordinary or Exclude.'],
+    [/piece.?(work|rate)|per.?piece|\bpiece/, 'ordinary', true, 'Piece-rate pay is Ordinary when hours are recorded. Use Special Salary only for work with no set hours.'],
+    [/tips?\b|gratuit/, null, true, 'Tips aren\'t covered by the guidance. Decide, then explain your choice in the report\'s "Data Constraints" field.'],
+    [/vac|vacation|\bpto\b|paid time off|sick|bereave|funeral|jury|witness|personal|family|leave|\bflex|lieu|banked time|float/, 'ordinary', false, 'Paid leave at 100% of salary is Ordinary Pay, and its hours count as Hours Worked (banked flex time is treated like vacation).'],
+    [/shift|differential|\bdiff\b|premium|weekend|night|evening|lead.?hand|acting|responsib|bilingual|danger|hazard|charge/, 'ordinary', false, 'Premiums that are neither overtime nor an allowance are Ordinary Pay.'],
+    [/regular|\breg\b|salary|\bsal\b|wage|hourly|\bbase\b|straight|training|orientation|meeting|\bhrly\b/, 'ordinary', false, 'Pay for hours worked, before deductions, is Ordinary Pay.'],
+  ];
+
+  function suggest(label, opts = {}) {
+    const s = ' ' + str(label).toLowerCase().replace(/[_]+/g, ' ') + ' ';
+    let res = { cat: null, flag: true, reason: 'Code not recognised. Pick where it belongs.' };
+    for (const [re, cat, flag, reason] of RULES) if (re.test(s)) { res = { cat, flag, reason }; break; }
+    if (opts.wide) {
+      const isHours = /\b(hours|hrs|hr|units|qty)\b/i.test(label);
+      if (isHours) {
+        if (res.cat === 'ordinary') res = { ...res, cat: 'hours', reason: 'Hours column: ' + res.reason };
+        else if (res.cat === 'overtime') res = { ...res, cat: 'ot_hours', reason: 'Hours column: ' + res.reason };
+        else if (res.cat) res = { ...res, cat: 'exclude', reason: 'Hours for a pay type that isn\'t reported. ' + res.reason };
+      }
+    }
+    return res;
+  }
+
+  function normalizeGender(v) {
+    const s = str(v).toLowerCase().replace(/[^a-z-]/g, '');
+    if (!s) return { code: 'U', known: true };
+    if (['m', 'male', 'man', 'men'].includes(s)) return { code: 'M', known: true };
+    if (['w', 'f', 'female', 'woman', 'women'].includes(s)) return { code: 'W', known: true };
+    if (['x', 'nonbinary', 'non-binary', 'nb', 'enby'].includes(s)) return { code: 'X', known: true };
+    if (['u', 'unknown', 'undisclosed', 'prefernottosay', 'prefernottoanswer', 'declined', 'notstated', 'na', 'none', 'nottold'].includes(s)) return { code: 'U', known: true };
+    return { code: 'U', known: false };
+  }
+
+  // ---------- conversion ----------
+  function collectItems(table, cfg) {
+    const rows = table.slice(cfg.headerRow + 1).filter(r => !isTotalRow(r, cfg));
+    const items = new Map();
+    const add = (key, label, emp, hours, amount) => {
+      if (!items.has(key)) items.set(key, { key, label, emps: new Set(), hours: 0, amount: 0 });
+      const it = items.get(key); it.emps.add(emp);
+      if (!Number.isNaN(hours)) it.hours += hours;
+      if (!Number.isNaN(amount)) it.amount += amount;
+    };
+    if (cfg.layout === 'long') {
+      for (const r of rows) {
+        const key = str(r[cfg.code]) || '(blank code)';
+        const d = cfg.desc >= 0 ? str(r[cfg.desc]) : '';
+        add(key, d && d !== key ? key + ' — ' + d : key, str(r[cfg.id]), cfg.hours >= 0 ? parseNumber(r[cfg.hours]) : 0, parseNumber(r[cfg.amount]));
+      }
+    } else {
+      const header = table[cfg.headerRow];
+      const skip = new Set([cfg.id, cfg.name, cfg.gender].filter(i => i >= 0));
+      header.forEach((h, c) => {
+        if (skip.has(c)) return;
+        const vals = rows.map(r => r[c]);
+        if (!vals.some(v => str(v) !== '' && !Number.isNaN(parseNumber(v)) && parseNumber(v) !== 0)) return;
+        if (vals.filter(isTextCell).length > vals.length / 2) return;
+        for (const r of rows) {
+          const v = parseNumber(r[c]);
+          if (str(r[c]) === '' || v === 0) continue;
+          const isH = /\b(hours|hrs|hr|units|qty)\b/i.test(str(h));
+          add(String(c), str(h) || 'Column ' + (c + 1), str(r[cfg.id]), isH ? v : 0, isH ? 0 : v);
+        }
+      });
+    }
+    return [...items.values()].map(it => ({ ...it, employees: it.emps.size, emps: undefined }));
+  }
+
+  const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+  function convert(table, cfg, mapping, opts = {}) {
+    const rows = table.slice(cfg.headerRow + 1).filter(r => !isTotalRow(r, cfg));
+    const header = table[cfg.headerRow] || [];
+    const emps = new Map();
+    const issues = {};
+    const note = (key, level, msg, emp) => {
+      if (!issues[key]) issues[key] = { level, msg, count: 0, examples: [] };
+      const it = issues[key]; it.count++;
+      if (emp != null && it.examples.length < 5 && !it.examples.includes(emp)) it.examples.push(emp);
+    };
+    const unmapped = new Set();
+    const get = (id) => {
+      if (!emps.has(id)) emps.set(id, { id, g: '', hw: 0, ord: 0, sp: 0, oth: 0, otp: 0, bo: 0 });
+      return emps.get(id);
+    };
+    const apply = (e, cat, hours, amount, label) => {
+      if (Number.isNaN(hours)) { note('nanH', 'error', 'Some hours values aren\'t numbers, so they were treated as 0.', e.id); hours = 0; }
+      if (Number.isNaN(amount)) { note('nanA', 'error', 'Some amounts aren\'t numbers, so they were treated as 0.', e.id); amount = 0; }
+      switch (cat) {
+        case 'ordinary': e.ord += amount; e.hw += hours; break;
+        case 'overtime': e.otp += amount; e.oth += hours; break;
+        case 'special': e.sp += amount; break;
+        case 'bonus': e.bo += amount; break;
+        case 'hours': e.hw += hours || amount; break;      // wide layout: value of an hours column
+        case 'ot_hours': e.oth += hours || amount; break;
+        case 'exclude': break;
+        default: if (amount || hours) unmapped.add(label);
+      }
+    };
+    for (const r of rows) {
+      const id = str(r[cfg.id]);
+      const e = get(id);
+      if (cfg.gender >= 0 && !e.g) e.g = str(r[cfg.gender]);
+      if (cfg.layout === 'long') {
+        const key = str(r[cfg.code]) || '(blank code)';
+        apply(e, mapping[key], cfg.hours >= 0 ? parseNumber(r[cfg.hours]) : 0, parseNumber(r[cfg.amount]), key);
+      } else {
+        header.forEach((h, c) => {
+          const cat = mapping[String(c)];
+          if (cat === undefined) return; // not a pay column
+          const v = parseNumber(r[c]);
+          if (str(r[c]) === '' || v === 0) return;
+          if (cat === 'hours' || cat === 'ot_hours') apply(e, cat, v, 0, String(c));
+          else apply(e, cat, 0, v, String(c));
+        });
+      }
+    }
+    if (unmapped.size) note('unmapped', 'error', `${unmapped.size} pay code(s) with amounts still need a decision. Until then they're left out.`);
+
+    const out = [];
+    let dropped = 0;
+    for (const e of emps.values()) {
+      let g;
+      if (opts.genderMode === 'none') g = { code: 'U', known: true };
+      else if (opts.genderMode === 'file') g = normalizeGender((opts.genderMap || {})[e.id]);
+      else g = normalizeGender(e.g);
+      if (!g.known) note('gender', 'warn', 'Gender value not recognised, so these employees are reported as U. Check the spelling, or record it as M, W, X or U.', e.id);
+      if (opts.genderMode === 'file' && !(e.id in (opts.genderMap || {}))) note('gmiss', 'warn', 'Employee not in the gender file, so reported as U.', e.id);
+      let hw = r2(e.hw), ord = r2(e.ord), sp = r2(e.sp), oth = r2(e.oth), otp = r2(e.otp), bo = r2(e.bo);
+      if (hw === 0 && ord === 0 && sp === 0 && oth === 0 && otp === 0 && bo === 0) { dropped++; continue; }
+      if (hw === 0 && ord === 0 && sp === 0) {
+        note('onlyExtra', 'warn', 'Employee received only bonus or overtime pay in the period (e.g. left before it began). The province requires Hours Worked and Ordinary Pay, so they are left out. Record this under "Data Constraints".', e.id);
+        continue;
+      }
+      if (ord > 0 && hw <= 0) {
+        if (opts.fallbackHours > 0) { hw = opts.fallbackHours; note('fallback', 'warn', `No hours recorded, so the standard ${opts.fallbackHours} hours/year was used (a conversion formula the guidance allows). Record this under "Data Constraints".`, e.id); }
+      }
+      const row = { gender: g.code, hours: hw, ordinary: ord, special: sp, otHours: oth, otPay: otp, bonus: bo, _id: e.id };
+      const errs = validateRecord(rowToStrings(row));
+      if (errs.length) {
+        for (const m of errs) note('v:' + m.replace(/'[^']*'/g, "'…'"), 'error', 'Province would reject: ' + m + hint(m), e.id);
+        if (opts.dropInvalid) { note('droppedBad', 'warn', 'Left out because the province would reject the row (your option).', e.id); continue; }
+      }
+      out.push(row);
+    }
+    if (dropped) note('zero', 'info', `${dropped} employee(s) received only excluded pay, such as severance, allowances or vacation payout. They aren't reported.`);
+    return { rows: out, issues: Object.values(issues), employees: emps.size };
+  }
+
+  function hint(m) {
+    if (/Hours Worked must not be blank or 0 when Ordinary Pay/.test(m)) return ' Fix: map that employee\'s hours codes, or set standard annual hours for salaried staff in Options.';
+    if (/Ordinary Pay must not be blank or 0 when Hours Worked/.test(m)) return ' Fix: check that the pay codes carrying those hours are mapped to Ordinary.';
+    if (/Special Salary must not contain data/.test(m)) return ' Fix: someone with regular pay can\'t also have Special Salary. Remap that code to Ordinary, Bonus or Exclude.';
+    if (/Overtime Hours must not be blank/.test(m)) return ' Fix: map an overtime-hours column (wide layout) or include hours on overtime codes.';
+    if (/Overtime Pay must not be blank/.test(m)) return ' Fix: this employee has overtime hours but no overtime pay. Check the overtime code mapping.';
+    return '';
+  }
+
+  // ---------- output + province validation ----------
+  const fmt = (n) => { const x = r2(n); return Object.is(x, -0) ? '0' : String(x); };
+  function rowToStrings(r) { return [r.gender, fmt(r.hours), fmt(r.ordinary), fmt(r.special), fmt(r.otHours), fmt(r.otPay), fmt(r.bonus)]; }
+  function toCSV(rows) { return [HEADER.join(','), ...rows.map(r => rowToStrings(r).join(','))].join('\n') + '\n'; }
+
+  // Port of bcgov/fin-pay-transparency backend/src/v1/services/validate-service.ts (Apache-2.0), validateRecord().
+  const isZero = (v) => { const n = Number.parseFloat(v); if (n == 0) return true; return v === '' || v == null; };
+  const isNum = (v) => v !== null && v !== undefined && !Number.isNaN(Number(v));
+  function validateRecord(vals) {
+    const [g, hw, ord, sp, oth, otp, bo] = vals;
+    const rec = { 'Hours Worked': hw, 'Overtime Hours': oth, 'Ordinary Pay': ord, 'Special Salary': sp, 'Overtime Pay': otp, 'Bonus Pay': bo };
+    const errs = [];
+    for (const [cols, max] of [[['Hours Worked', 'Overtime Hours'], MAX_HOURS], [['Ordinary Pay', 'Special Salary', 'Overtime Pay', 'Bonus Pay'], MAX_DOLLARS]]) {
+      for (const c of cols) {
+        const v = rec[c];
+        if (!isZero(v) && !isNum(v)) errs.push(`Invalid number '${v}' in ${c}.`);
+        else if (Number(v) < 0 || Number(v) > max) errs.push(`${c} must specify a positive number no larger than ${max}. Found '${v}'.`);
+      }
+    }
+    if (!GENDERS.includes(g)) errs.push(`Invalid Gender Code '${g}' (expected one of: M, W, F, X, U).`);
+    if (!isZero(sp) && (!isZero(hw) || !isZero(ord))) errs.push('Special Salary must not contain data when Hours Worked or Ordinary Pay contains data.');
+    if (isZero(hw) && isZero(ord) && isZero(sp)) errs.push('Ordinary Pay and Hours Worked must contain data.');
+    if (isZero(hw) && !isZero(ord)) errs.push('Hours Worked must not be blank or 0 when Ordinary Pay contains data.');
+    if (isZero(ord) && !isZero(hw)) errs.push('Ordinary Pay must not be blank or 0 when Hours Worked contains data.');
+    if (isZero(otp) && !isZero(oth)) errs.push('Overtime Pay must not be blank or 0 when Overtime Hours contains data.');
+    else if (isZero(oth) && !isZero(otp)) errs.push('Overtime Hours must not be blank or 0 when Overtime Pay contains data.');
+    return errs;
+  }
+
+  /** Validate a CSV the way the Reporting Tool does: exact trimmed header, then every row. */
+  function validateCSVText(text) {
+    const rows = parseCSV(text).filter(r => !(r.length === 1 && r[0].trim() === ''));
+    const headerOk = rows.length > 0 && rows[0].map(c => c.trim()).join(',') === HEADER.join(',');
+    const rowErrors = [];
+    rows.slice(1).forEach((r, i) => { const e = validateRecord(r); if (e.length) rowErrors.push({ row: i + 1, errors: e }); });
+    return { headerOk, rows: rows.length - 1, rowErrors };
+  }
+
+  return { HEADER, CATS, RULES, parseCSV, parseNumber, readXlsx, readFile, detectHeaderRow, guessColumns, collectItems, suggest, normalizeGender, convert, toCSV, rowToStrings, validateRecord, validateCSVText };
+})();
+if (typeof module !== 'undefined') module.exports = PT;
+</script>
+
+<script>
+/* ---------- UI ---------- */
+// Owner fills these in before going live (see README.md).
+const PAYMENT_LINK = 'PAYMENT_LINK';         // Stripe Payment Link, C$149. Set its after-payment redirect to: <page URL>?session_id={CHECKOUT_SESSION_ID}
+const CONTACT_EMAIL = 'CONTACT_EMAIL';
+const SELLER_NAME = 'SELLER_NAME';
+const DEADLINE = new Date('2026-11-01T00:00:00-07:00');
+
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const S = { table: null, cfg: null, items: [], mapping: {}, genderMap: null, result: null };
+const fmt$ = (n) => n.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---- unlock (payment) ----
+(function handleReturn() {
+  const m = /[?&]session_id=(cs_live_[A-Za-z0-9_]+)/.exec(location.search);
+  if (m) { store.set('ptc-unlock', { at: new Date().toISOString(), session: m[1] }); history.replaceState(null, '', location.pathname + location.hash); }
+})();
+const unlocked = () => !!store.get('ptc-unlock', null);
+window.addEventListener('storage', (e) => { if (e.key === 'ptc-unlock') render(); });
+
+// ---- static bits ----
+(function initStatic() {
+  const days = Math.ceil((DEADLINE - new Date()) / 86400000);
+  $('countdown').textContent = days > 0 ? `B.C. deadline: November 1, 2026, ${days} day${days === 1 ? '' : 's'} away` : 'The November 1, 2026 deadline has passed. Late reports still need this file.';
+  for (const id of ['contact', 'contact2']) $(id).textContent = CONTACT_EMAIL;
+  $('seller').textContent = SELLER_NAME;
+  // Until the owner fills these in, hide the lines rather than show placeholders.
+  if (!/@/.test(CONTACT_EMAIL)) $('contact').closest('p').classList.add('hidden');
+  if (!/@/.test(CONTACT_EMAIL) || SELLER_NAME === 'SELLER_NAME') $('seller').closest('p').classList.add('hidden');
+  const buy = $('buy');
+  if (/^https:\/\//.test(PAYMENT_LINK)) buy.href = PAYMENT_LINK;
+  else { buy.removeAttribute('href'); buy.setAttribute('aria-disabled', 'true'); buy.style.opacity = .5; buy.title = 'Checkout not configured yet'; }
+})();
+
+// ---- file input ----
+const drop = $('drop'), fileIn = $('file');
+drop.addEventListener('click', () => fileIn.click());
+drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+fileIn.addEventListener('change', () => { if (fileIn.files[0]) load(fileIn.files[0]); });
+
+async function load(file) {
+  $('fileErr').classList.add('hidden');
+  try {
+    const table = await PT.readFile(file.name, await file.arrayBuffer());
+    if (!table.length) throw new Error('The file is empty.');
+    S.table = table;
+    const hr = PT.detectHeaderRow(table);
+    setupColumns(hr);
+    drop.querySelector('strong').textContent = file.name;
+    $('step-cols').classList.remove('hidden');
+  } catch (err) {
+    $('fileErr').textContent = err.message || String(err);
+    $('fileErr').classList.remove('hidden');
+  }
+}
+
+function fillSelect(sel, header, val, optional) {
+  sel.innerHTML = (optional ? '<option value="-1">(none)</option>' : '') + header.map((h, i) => `<option value="${i}">${esc(String(h).trim() || 'Column ' + (i + 1))}</option>`).join('');
+  sel.value = String(val >= 0 ? val : (optional ? -1 : 0));
+}
+
+function setupColumns(hr) {
+  const header = S.table[hr] || [];
+  const g = PT.guessColumns(header, S.table.slice(hr + 1, hr + 400));
+  $('hdrRow').value = hr + 1;
+  $('layout').value = g.layout;
+  fillSelect($('cId'), header, g.id, false);
+  fillSelect($('cCode'), header, g.code, false);
+  fillSelect($('cDesc'), header, g.desc, true);
+  fillSelect($('cHours'), header, g.hours, true);
+  fillSelect($('cAmt'), header, g.amount, false);
+  fillSelect($('cGender'), header, g.gender, true);
+  $('gSrc').value = g.gender >= 0 ? 'col' : (S.genderMap ? 'file' : 'none');
+  syncGender();
+  S.mapping = {};
+  refresh();
+}
+
+function readCfg() {
+  const n = (id) => Number($(id).value);
+  return { headerRow: Math.max(0, n('hdrRow') - 1), layout: $('layout').value, id: n('cId'), name: -1, code: n('cCode'), desc: n('cDesc'), hours: n('cHours'), amount: n('cAmt'), gender: $('gSrc').value === 'col' ? n('cGender') : -1 };
+}
+
+$('hdrRow').addEventListener('change', () => setupColumns(Math.max(0, Number($('hdrRow').value) - 1)));
+for (const id of ['layout', 'cId', 'cCode', 'cDesc', 'cHours', 'cAmt']) $(id).addEventListener('change', () => { S.mapping = {}; refresh(); });
+for (const id of ['cGender', 'fallback', 'dropBad', 'onlyFlag']) $(id).addEventListener('change', render);
+function syncGender() { $('gColWrap').classList.toggle('hidden', $('gSrc').value !== 'col'); $('gFileWrap').classList.toggle('hidden', $('gSrc').value !== 'file'); }
+$('gSrc').addEventListener('change', () => { syncGender(); render(); });
+$('gFile').addEventListener('change', async () => {
+  const f = $('gFile').files[0]; if (!f) return;
+  try {
+    const t = await PT.readFile(f.name, await f.arrayBuffer());
+    const hr = PT.detectHeaderRow(t), g = PT.guessColumns(t[hr], []);
+    const idc = g.id >= 0 ? g.id : 0, gc = g.gender >= 0 ? g.gender : 1;
+    S.genderMap = {};
+    for (const r of t.slice(hr + 1)) { const id = String(r[idc] ?? '').trim(); if (id) S.genderMap[id] = r[gc]; }
+    $('gFileInfo').textContent = `${Object.keys(S.genderMap).length} employees read from ${f.name} (ID column "${t[hr][idc]}", gender column "${t[hr][gc]}").`;
+  } catch (err) { $('gFileInfo').textContent = 'Could not read gender file: ' + err.message; }
+  render();
+});
+
+function refresh() {
+  S.cfg = readCfg();
+  for (const el of document.querySelectorAll('.lo')) el.classList.toggle('hidden', S.cfg.layout !== 'long');
+  S.items = PT.collectItems(S.table, S.cfg);
+  const saved = store.get('ptc-map-v1', {});
+  for (const it of S.items) {
+    const sug = PT.suggest(it.label, { wide: S.cfg.layout === 'wide' });
+    it.sug = sug;
+    if (!(it.key in S.mapping)) S.mapping[it.key] = saved[it.label] !== undefined ? saved[it.label] : sug.cat;
+    it.fromSaved = saved[it.label] !== undefined;
+  }
+  render();
+}
+
+function render() {
+  if (!S.table) return;
+  // mapping table
+  const only = $('onlyFlag').checked;
+  const opts = (cur) => '<option value="">Choose…</option>' + Object.entries(PT.CATS).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+  $('mapTbl').querySelector('tbody').innerHTML = S.items
+    .filter(it => !only || it.sug.flag || !S.mapping[it.key])
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    .map(it => {
+      const cls = !S.mapping[it.key] ? 'unmapped' : (it.sug.flag && !it.fromSaved ? 'flag' : '');
+      return `<tr class="${cls}"><td>${esc(it.label)}</td><td class="num">${it.employees}</td><td class="num">${it.hours ? fmt$(it.hours) : ''}</td><td class="num">${fmt$(it.amount)}</td>
+        <td><select data-key="${esc(it.key)}">${opts(S.mapping[it.key])}</select></td><td class="note">${it.fromSaved ? 'Your saved choice. ' : ''}${esc(it.sug.reason)}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="note">No pay codes found. Check the column choices above.</td></tr>';
+  for (const sel of $('mapTbl').querySelectorAll('select')) sel.addEventListener('change', () => {
+    S.mapping[sel.dataset.key] = sel.value || null;
+    const it = S.items.find(i => i.key === sel.dataset.key);
+    const saved = store.get('ptc-map-v1', {}); saved[it.label] = sel.value || null; store.set('ptc-map-v1', saved);
+    it.fromSaved = true;
+    render();
+  });
+
+  // convert
+  const genderMode = $('gSrc').value;
+  S.cfg.gender = genderMode === 'col' ? Number($('cGender').value) : -1;
+  const res = PT.convert(S.table, S.cfg, S.mapping, { genderMode, genderMap: S.genderMap || {}, fallbackHours: Number($('fallback').value) || 0, dropInvalid: $('dropBad').checked });
+  S.result = res;
+  const csv = PT.toCSV(res.rows);
+  const check = PT.validateCSVText(csv);
+  const errs = res.issues.filter(i => i.level === 'error');
+  const ready = check.headerOk && check.rowErrors.length === 0 && errs.length === 0 && res.rows.length > 0;
+
+  const counts = res.rows.reduce((a, r) => (a[r.gender === 'F' ? 'W' : r.gender]++, a), { M: 0, W: 0, X: 0, U: 0 });
+  $('summary').innerHTML = `<div class="issue ${ready ? 'ok' : 'error'}"><strong>${ready ? 'Ready.' : 'Not ready yet.'}</strong> ${res.rows.length} employee rows from ${res.employees} employees in the file. M ${counts.M} · W ${counts.W} · X ${counts.X} · U ${counts.U}. Checked against the province's upload rules: ${check.rowErrors.length ? check.rowErrors.length + ' row(s) would be rejected' : 'no row errors'}.</div>`;
+  const order = { error: 0, warn: 1, info: 2 };
+  $('issues').innerHTML = res.issues.sort((a, b) => order[a.level] - order[b.level]).map(i =>
+    `<div class="issue ${i.level === 'info' ? 'ok' : i.level}">${esc(i.msg)}${i.count > 1 || i.examples.length ? ` <span class="small">(${i.count}${i.examples.length ? '; e.g. employee ' + i.examples.map(esc).join(', ') : ''})</span>` : ''}</div>`).join('');
+
+  // preview
+  $('prevTbl').querySelector('thead').innerHTML = '<tr>' + PT.HEADER.map(h => `<th class="num">${h}</th>`).join('') + '</tr>';
+  $('prevTbl').querySelector('tbody').innerHTML = res.rows.slice(0, 5).map(r => '<tr>' + PT.rowToStrings(r).map(v => `<td class="num">${esc(v)}</td>`).join('') + '</tr>').join('') +
+    (res.rows.length > 5 ? `<tr><td colspan="7" class="note">…and ${res.rows.length - 5} more rows in the full download.</td></tr>` : '');
+
+  // gate
+  const paid = unlocked();
+  $('dl').disabled = !(paid && ready);
+  $('dlMap').disabled = !paid;
+  $('gateMsg').innerHTML = !paid ? `The full download unlocks after purchase (<a href="#price">C$149/yr</a>). The preview and every check above are free.` : (ready ? 'Unlocked.' : 'Unlocked. Fix the red items above to enable the download.');
+}
+
+function save(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('dl').addEventListener('click', () => { if (unlocked()) save('pay-transparency-upload.csv', PT.toCSV(S.result.rows)); });
+$('dlMap').addEventListener('click', () => {
+  if (!unlocked()) return;
+  const q = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+  const lines = ['Pay code,Employees,Hours,Amount,Mapped to,Suggested,Guidance note'];
+  for (const it of S.items) lines.push([q(it.label), it.employees, it.hours.toFixed(2), it.amount.toFixed(2), q(PT.CATS[S.mapping[it.key]] || 'UNMAPPED'), q(PT.CATS[it.sug.cat] || '—'), q(it.sug.reason)].join(','));
+  save('pay-code-mapping-record.csv', lines.join('\n') + '\n');
+});
+</script>
+</body>
+</html>

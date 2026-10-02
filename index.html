@@ -160,7 +160,8 @@ code{font-size:13px;background:var(--bg);padding:1px 4px;border-radius:4px}
 
 <footer>
   <p>Not affiliated with, or endorsed by, the Government of British Columbia. This isn't legal advice. You upload the CSV to the province's Pay Transparency Reporting Tool yourself, using your Business BCeID. Rules come from the province's guidance for pay transparency reports and its published upload validation, as checked on 2026-10-02.</p>
-  <p>Sold by <span id="seller">SELLER_NAME</span> · <span id="contact2">CONTACT_EMAIL</span></p>
+  <p>Sold by <span id="seller">SELLER_NAME</span> · <span id="contact2">CONTACT_EMAIL</span> · Vancouver, BC</p>
+  <p>Price: C$149 per employer, one-time, delivered instantly as a file download in your browser. Refunds: if the file doesn't pass the province's upload validation, email within 30 days of purchase for a full refund.</p>
 </footer>
 </div>
 
@@ -580,8 +581,8 @@ if (typeof module !== 'undefined') module.exports = PT;
 /* ---------- UI ---------- */
 // Owner fills these in before going live (see README.md).
 const PAYMENT_LINK = 'PAYMENT_LINK';         // Stripe Payment Link, C$149. Set its after-payment redirect to: <page URL>?session_id={CHECKOUT_SESSION_ID}
-const CONTACT_EMAIL = 'CONTACT_EMAIL';
-const SELLER_NAME = 'SELLER_NAME';
+const CONTACT_EMAIL = 'cole@theandraes.com';
+const SELLER_NAME = 'Cole Andrae';
 const DEADLINE = new Date('2026-11-01T00:00:00-07:00');
 
 const $ = (id) => document.getElementById(id);
